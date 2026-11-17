@@ -2,7 +2,7 @@
 
 Notable changes, newest first. Releases are git tags; this file says what each tag contains.
 
-## Unreleased
+## v0.1.2
 
 The service now builds with Go 1.27.4 and runs on azugo v0.50.2. The OID4VP surface, the configuration
 and the database are unchanged; request bodies are now bounded by the framework (see *Changed*).
