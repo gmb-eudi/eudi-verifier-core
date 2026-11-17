@@ -32,7 +32,11 @@ func (p pipelineProcessor) Process(ctx *azugo.Context, sess *oid4vp.Session) (st
 	}
 
 	pc := pipeline.NewContext(sess.ID, sess, meta)
-	pc.Raw = oid4vp.RawResponse{Body: ctx.Body.Bytes()}
+	raw, err := ctx.Body.Bytes()
+	if err != nil {
+		return "", err
+	}
+	pc.Raw = oid4vp.RawResponse{Body: raw}
 	pc.Policy = pol
 	pc.Origin = ctx.Header.Get("Origin") // consumed only for the dcapi flow
 	if meta.Flow != "dcapi" {

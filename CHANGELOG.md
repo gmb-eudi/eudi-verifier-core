@@ -2,6 +2,26 @@
 
 Notable changes, newest first. Releases are git tags; this file says what each tag contains.
 
+## Unreleased
+
+The service now builds with Go 1.27.4 and runs on azugo v0.50.2. The OID4VP surface, the configuration
+and the database are unchanged; request bodies are now bounded by the framework (see *Changed*).
+
+### Changed
+
+- **Go 1.27.4** (was 1.27.2), in `go.mod` and as the image's default build toolchain (`ARG GO_VERSION`
+  in the `Dockerfile`). Rebuild the image to pick it up.
+- **azugo v0.50.2** (was v0.40.0), azugo core v0.50.1, and the first-party libraries at their newest
+  releases: `go-oid4vp` v0.0.10, `go-dcql` v0.0.4, `go-eudi-crypto` v0.0.10, `go-eudi-rpcert` v0.0.8,
+  `go-eudi-trust` v0.1.4, `go-mdoc` v0.1.4, `go-sdjwt` v0.0.10, `go-statuslist` v0.1.7,
+  `go-verifier-helpers` v0.0.6, `go-platform-kit` v1.13.0.
+- **Request bodies are held to the framework's limit.** A body over it answers 413; the limit is 4 MiB
+  unless a route sets its own or `SERVER_MAX_REQUEST_BODY_SIZE` is set. `POST /internal/v1/sessions`
+  keeps the 4 MiB default. The wallet response endpoint's limit follows `MAX_RESPONSE_BODY_BYTES`
+  (default 1 MiB) plus 4 KiB for the form framing around the response, so a larger configured cap is
+  honoured; a body over it, however large, still answers the wallet's `invalid_request` "response too
+  large" error rather than a framework answer.
+
 ## v0.1.1
 
 A security release. **The service now builds with Go 1.27.2**, and its libraries move to their Go 1.27.2

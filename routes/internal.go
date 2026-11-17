@@ -262,8 +262,13 @@ func validWebOrigin(raw string) error {
 func (r *router) internalCreateSession(ctx *azugo.Context) {
 	ctx.SkipRequestLog() // no session ids in logs
 
+	raw, err := ctx.Body.Bytes()
+	if err != nil {
+		ctx.Error(err)
+		return
+	}
 	var req internalCreateRequest
-	if err := json.Unmarshal(ctx.Body.Bytes(), &req); err != nil {
+	if err := json.Unmarshal(raw, &req); err != nil {
 		ctx.Error(azugo.BadRequestError{Description: "malformed request body", Err: err})
 		return
 	}

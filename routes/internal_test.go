@@ -179,6 +179,33 @@ func TestInternalCreateCrossDeviceHappyPath(t *testing.T) {
 	qt.Assert(t, qt.Equals(getStatus, fasthttp.StatusOK))
 }
 
+// TestInternalCreateBodyLimit: the framework's default request body limit
+// (4 MiB) applies to the create route. A body over it is refused with 413 in
+// the internal problem envelope; a body just under it is read and then judged
+// on its content (400 here, as the padding field is unknown), not on its size.
+func TestInternalCreateBodyLimit(t *testing.T) {
+	app := testApp(t)
+	app.Start(t)
+	defer app.Stop()
+
+	const limit = 4 << 20
+	t.Run("over the limit", func(t *testing.T) {
+		body := validCreateBody(t)
+		body["padding"] = strings.Repeat("A", limit)
+		status, respBody := internalPost(t, app, "/internal/v1/sessions", body, bearer(internalTestToken))
+		qt.Assert(t, qt.Equals(status, fasthttp.StatusRequestEntityTooLarge))
+		var problem map[string]any
+		qt.Assert(t, qt.IsNil(json.Unmarshal(respBody, &problem)))
+		qt.Assert(t, qt.IsTrue(problem["status"] != nil || problem["code"] != nil || problem["title"] != nil))
+	})
+	t.Run("just under the limit", func(t *testing.T) {
+		body := validCreateBody(t)
+		body["padding"] = strings.Repeat("A", limit-64<<10)
+		status, _ := internalPost(t, app, "/internal/v1/sessions", body, bearer(internalTestToken))
+		qt.Assert(t, qt.IsTrue(status != fasthttp.StatusRequestEntityTooLarge))
+	})
+}
+
 // TestInternalCreatePollOnlyNoWebhook: webhook_url is optional. Omitting it
 // creates a poll-only session whose result is retrieved via GET, never
 // delivered by webhook — so the create must still succeed (201).

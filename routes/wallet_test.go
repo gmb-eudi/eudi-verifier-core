@@ -314,6 +314,46 @@ func TestResponseBodyCap(t *testing.T) {
 	qt.Assert(t, qt.IsTrue(status >= 400))
 }
 
+// TestResponseBodyCapBoundaries: a body over the configured cap is refused as
+// the wallet's "response too large" error whether it is just over the cap or
+// far over the framework limit derived from it; a body at the cap is not
+// refused for its size.
+func TestResponseBodyCapBoundaries(t *testing.T) {
+	f := newFixture(t)
+	created := f.createSession(t, oid4vp.CrossDevice)
+	ro, err := f.wallet.FetchRequestObject(t.Context(), created.RequestURI)
+	qt.Assert(t, qt.IsNil(err))
+	u, err := url.Parse(ro.ResponseURI)
+	qt.Assert(t, qt.IsNil(err))
+	limit := f.app.Config().MaxResponseBodyBytes
+
+	post := func(t *testing.T, n int) (int, string) {
+		t.Helper()
+		resp, err := f.tapp.TestClient().Post(u.Path,
+			[]byte("response="+strings.Repeat("A", n)),
+			f.tapp.TestClient().WithHeader("Content-Type", "application/x-www-form-urlencoded"))
+		qt.Assert(t, qt.IsNil(err))
+		defer fasthttp.ReleaseResponse(resp)
+		body, _ := resp.BodyUncompressed()
+		return resp.StatusCode(), string(body)
+	}
+
+	t.Run("just over the cap", func(t *testing.T) {
+		status, body := post(t, limit+1)
+		qt.Assert(t, qt.Equals(status, fasthttp.StatusBadRequest))
+		qt.Assert(t, qt.StringContains(body, "response too large"))
+	})
+	t.Run("far over the framework limit", func(t *testing.T) {
+		status, body := post(t, limit+walletBodyOverhead+1)
+		qt.Assert(t, qt.Equals(status, fasthttp.StatusBadRequest))
+		qt.Assert(t, qt.StringContains(body, "response too large"))
+	})
+	t.Run("at the cap", func(t *testing.T) {
+		_, body := post(t, limit-len("response="))
+		qt.Assert(t, qt.IsFalse(strings.Contains(body, "response too large")))
+	})
+}
+
 func TestUnknownSessionIsOID4VPError(t *testing.T) {
 	f := newFixture(t)
 	resp, err := f.tapp.TestClient().Get("/wallet/01JZXNOSUCH000000000000000/request.jwt")

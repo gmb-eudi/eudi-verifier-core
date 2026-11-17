@@ -2,6 +2,9 @@ package routes
 
 import (
 	"encoding/json"
+	"errors"
+
+	"github.com/valyala/fasthttp"
 
 	oid4vp "github.com/gmb-eudi/go-oid4vp"
 	"github.com/gmb-lib/go-platform-kit/propagation"
@@ -9,6 +12,12 @@ import (
 	"azugo.io/azugo"
 	"go.uber.org/zap"
 )
+
+// walletBodyOverhead is the headroom added to the configured response cap when
+// the framework's request body limit is set: the form field name and its
+// separators that wrap the encrypted response, which the cap itself does not
+// count against.
+const walletBodyOverhead = 4 << 10
 
 // bindWallet registers the wallet-facing endpoints. Wallet boundary =
 // OID4VP error shapes, never problem+json.
@@ -124,8 +133,23 @@ func (r *router) walletResponse(ctx *azugo.Context) {
 	}
 	r.recoverCorrelation(ctx, id)
 
-	// Body cap BEFORE any parsing.
-	if len(ctx.Body.Bytes()) > r.Config().MaxResponseBodyBytes {
+	// Body cap BEFORE any parsing. The framework's own limit follows the
+	// configured response cap (plus the form framing around the response
+	// parameter), so a cap above the framework default is honoured and a body
+	// far over it is refused before it is held in memory. Both refusals are
+	// rendered as the wallet's oversized-body error.
+	ctx.SetMaxBodySize(r.Config().MaxResponseBodyBytes + walletBodyOverhead)
+	body, err := ctx.Body.Bytes()
+	if err != nil {
+		var se interface{ StatusCode() int }
+		if errors.As(err, &se) && se.StatusCode() == fasthttp.StatusRequestEntityTooLarge {
+			r.walletError(ctx, oid4vp.ErrBodyTooLarge)
+			return
+		}
+		r.walletError(ctx, azugo.BadRequestError{Description: "unreadable request body", Err: err})
+		return
+	}
+	if len(body) > r.Config().MaxResponseBodyBytes {
 		r.walletError(ctx, oid4vp.ErrBodyTooLarge) // oversized-body sentinel
 		return
 	}
